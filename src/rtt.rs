@@ -2,16 +2,16 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
-pub(crate) enum MultiTiploc {
-    Single(String),
-    Multi(Vec<String>),
+pub(crate) enum StringOrStringVec {
+    String(String),
+    Vec(Vec<String>)
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub(crate) struct Location {
     // pub(crate) name: String,
     // pub(crate) crs: String,
-    pub(crate) tiploc: String,
+    pub(crate) tiploc: StringOrStringVec,
     // country: String,
     // system: String,
 }

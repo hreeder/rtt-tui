@@ -1,9 +1,10 @@
 use anyhow::bail;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use std::{fs::File, time::{Duration, Instant}};
+use std::{fs::{File, self}, time::{Duration, Instant}};
 
 use crate::rtt;
+use rtt::StringOrStringVec;
 
 #[derive(Deserialize)]
 struct ConfigFile {
@@ -68,9 +69,12 @@ impl App {
             bail!("Unable to get destination station: {}", resp.status());
         }
 
-        self.destination = match resp.json::<rtt::LocationSearchResponse>().await {
+        let raw_response = resp.text().await?;
+
+        self.destination = match serde_json::from_str::<rtt::LocationSearchResponse>(&raw_response) {
             Ok(parsed) => Some(parsed.location),
             Err(err) => {
+                fs::write("destination.json", raw_response).expect("Unable to dump destination.json");
                 bail!("Unable to parse destination station: {} {}", err, url)
             }
         };
@@ -96,15 +100,22 @@ impl App {
         if !resp.status().is_success() {
             bail!("Unable to get source: {}", resp.status());
         }
+        
+        let raw_response = resp.text().await?;
 
-        let location_search = match resp.json::<rtt::LocationSearchResponse>().await {
-            Ok(parsed) => parsed,
+        let location_search: rtt::LocationSearchResponse = match serde_json::from_str(&raw_response) {
+            Ok(data) => data,
             Err(err) => {
+                fs::write("source.json", raw_response).expect("Unable to dump source.json");
                 bail!("Unable to parse source: {}", err);
             }
         };
 
-        let destination_tiploc = &self.destination.as_ref().unwrap().tiploc;
+        let destination_tiploc = match &self.destination.as_ref().unwrap().tiploc {
+            StringOrStringVec::String(tiploc) => tiploc,
+            StringOrStringVec::Vec(tiplocs) => &tiplocs[0]
+        };
+
         let filtered_services: Vec<rtt::LocationService> = location_search.services
             .into_iter()
             .filter(|service: &rtt::LocationService| &service.location_detail.destination.first().unwrap().tiploc == destination_tiploc)
