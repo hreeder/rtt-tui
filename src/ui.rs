@@ -141,11 +141,12 @@ fn location_detail_line<'a>(area: Rect, loc: rtt::ServiceLocationDetail) -> Vec<
 
     // Length so far?
     let length_so_far: usize = parts.iter().map(|it| it.width()).sum();
-    let to_go: usize = 12;
+    let to_go: usize = 16;
     let padding: usize = usize::try_from(area.width).unwrap() - length_so_far - to_go;
     (0..padding).for_each(|_| parts.extend(vec![Span::from(" ")]));
 
     // Calling Times
+    parts.extend(vec![Span::styled(format!("{} ", loc.crs), style)]);
     parts.extend(vec![Span::styled(match loc.display_as.as_str() {
         "CALL" | "DESTINATION" => loc.realtime_arrival.unwrap_or_default(),
         _                      => "    ".to_string(),

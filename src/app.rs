@@ -1,7 +1,7 @@
 use anyhow::bail;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use std::{fs::{File, self}, time::{Duration, Instant}};
+use std::{fs::{File, self}, time::{Duration, Instant}, path::Path};
 
 use crate::rtt;
 use rtt::StringOrStringVec;
@@ -13,34 +13,50 @@ struct ConfigFile {
 }
 
 const API_BASE: &str = "https://api.rtt.io/api/v1/json";
+const DEBUG_DIR: &str = "~/.rtttui/debug";
 
 pub(crate) struct App {
     destination: Option<rtt::Location>,
     location_service: Option<rtt::LocationService>,
     pub(crate) service: Option<rtt::ServiceResponse>,
 
+    pub(crate) show_intermediary: bool,
+
     pub(crate) should_quit: bool,
     pub(crate) last_service_update: Option<Instant>,
     refresh_rate: Duration,
+    debug: bool,
 
     config: ConfigFile,
     http: reqwest::Client,
 }
 
 impl App {
-    pub fn new(refresh_rate: Duration) -> App{
+    pub fn new(refresh_rate: Duration, debug: bool) -> App{
         let cfg_path = shellexpand::tilde("~/.config/rtt.yaml").to_string();
         let cfg_file = File::open(cfg_path).unwrap();
         let config: ConfigFile = serde_yaml::from_reader(&cfg_file).unwrap();
+
+        let debug_path = shellexpand::tilde(DEBUG_DIR).to_string();
+        let debug_dir = Path::new(&debug_path);
+
+        if debug {
+            if !debug_dir.is_dir() {
+                fs::create_dir_all(debug_dir).expect("Unable to create debug output dir");
+            }
+        }
 
         App {
             destination: None,
             location_service: None,
             service: None,
 
+            show_intermediary: false,
+
             should_quit: false,
             last_service_update: None,
             refresh_rate,
+            debug,
 
             config,
             http: reqwest::Client::new(),
@@ -52,6 +68,7 @@ impl App {
         // want to support other keys in future
         #[allow(clippy::single_match)]
         match c {
+            'i' => self.show_intermediary = !self.show_intermediary,
             'q' => self.should_quit = true,
             _ => {}
         }
@@ -120,13 +137,33 @@ impl App {
             .into_iter()
             .filter(|service: &rtt::LocationService| &service.location_detail.destination.first().unwrap().tiploc == destination_tiploc)
             .collect::<Vec<rtt::LocationService>>();
-        
-        self.location_service = match filtered_services.first() {
-            Some(service) => Some(service.clone()),
-            None => {
-                bail!("Unable to find service");
+    
+        let mut found_closeness: i16 = 999;
+
+        let search_departure_time: i16 = departure_time.parse().expect("Unable to parse departure time as a number");
+
+        for service in filtered_services {
+            if service.location_detail.gbtt_booked_departure.is_none() {
+                continue;
             }
-        };
+
+            let gbtt_booked_departure = service
+                .location_detail
+                .gbtt_booked_departure
+                .as_ref();
+            
+            let service_booked_departure: i16 = gbtt_booked_departure
+                .unwrap_or(&String::from("0"))
+                .parse::<i16>()
+                .expect("Unable to parse service departure");
+
+            
+            let closeness = (search_departure_time - service_booked_departure).abs();
+            if closeness < found_closeness {
+                self.location_service = Some(service.clone());
+                found_closeness = closeness;
+            }
+        }
 
         Ok(())
     }
@@ -150,7 +187,14 @@ impl App {
             bail!("Unable to get service: {}", resp.status());
         }
 
-        self.service = match resp.json::<rtt::ServiceResponse>().await {
+        let contents = resp.text().await?;
+
+        if self.debug {
+            let path = shellexpand::tilde(&format!("{}/service.json", DEBUG_DIR)).to_string();
+            fs::write(path, &contents).expect("Couldn't write service.json");
+        }
+
+        self.service = match serde_json::from_str::<rtt::ServiceResponse>(&contents) {
             Ok(parsed) => Some(parsed),
             Err(err) => {
                 bail!("Unable to parse service: {} {}", err, url);

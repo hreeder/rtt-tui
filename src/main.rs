@@ -29,6 +29,10 @@ struct RttTui {
     #[argh(option, default = "30")]
     refresh_rate: u64,
 
+    /// enable debug file saving
+    #[argh(switch)]
+    debug: bool,
+
     /// departure time, ie 0830
     #[argh(positional)]
     departs: String,
@@ -83,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
     println!("Train Tracking, Data Provided by Realtime Trains (realtimetrains.co.uk)");
     println!("Searching for the {} from {} to {}", opts.departs, opts.source, opts.dest);
 
-    let mut app = app::App::new(refresh_rate);
+    let mut app = app::App::new(refresh_rate, opts.debug);
     app.load_destination(opts.dest).await?;
     app.find_service(opts.source, opts.departs).await?;
     app.refresh_service().await?;

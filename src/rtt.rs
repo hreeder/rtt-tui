@@ -30,11 +30,11 @@ pub(crate) struct ServiceLocation {
 pub(crate) struct ServiceLocationDetail {
     // realtimeActivated: bool,
     // tiploc: String,
-    // crs: String,
+    pub(crate) crs: String,
     pub(crate) description: String,
 
     // pub(crate) gbtt_booked_arrival: Option<String>,
-    // pub(crate) gbtt_booked_departure: Option<String>,
+    pub(crate) gbtt_booked_departure: Option<String>,
     // pub(crate) origin: Vec<ServiceLocation>,
     pub(crate) destination: Vec<ServiceLocation>,
     
