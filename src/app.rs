@@ -69,6 +69,12 @@ impl App {
         #[allow(clippy::single_match)]
         match c {
             'i' => self.show_intermediary = !self.show_intermediary,
+            // 'o' => {
+            //     let svc = match &self.service {
+            //         Some(service) => service,
+            //         None => { return }
+            //     };
+            // },
             'q' => self.should_quit = true,
             _ => {}
         }
@@ -177,11 +183,16 @@ impl App {
             now.format("%Y/%m/%d"),
         );
 
-        let resp = self.http
+        let result_resp = self.http
             .get(&url)
             .basic_auth(&self.config.username, Some(&self.config.password))
             .send()
-            .await?;
+            .await;
+
+        let resp = match result_resp {
+            Ok(response) => response,
+            Err(_error) => return Ok(())
+        };
         
         if !resp.status().is_success() {
             bail!("Unable to get service: {}", resp.status());
